@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // Funciones placeholder para la carga y guardado de imágenes
 void cargarImagen(int *imagen, int width, int height);
@@ -20,19 +21,35 @@ int main(int argc, char* argv[]) {
     int *imagenProcesada = (int *)malloc(width * height * sizeof(int));
 
     if (argc != 2) {
-      fprintf(stderr, "Dar un nombre de archivo de entrada");
-      exit(1);
+        fprintf(stderr, "Dar un nombre de archivo de entrada");
+        exit(1);
     }
 
     filename = argv[1];
-    // Cargar la imagen (no paralelizable)
+
+    clock_t start, end;
+    double cpu_time_used;
+
+    // Medir tiempo de carga de imagen
+    start = clock();
     cargarImagen(imagen, width, height);
+    end = clock();
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Tiempo de carga de imagen: %f segundos\n", cpu_time_used);
 
-    // Aplicar filtro (paralelizable)
+    // Medir tiempo de aplicación del filtro
+    start = clock();
     aplicarFiltro(imagen, imagenProcesada, width, height);
+    end = clock();
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Tiempo de aplicación del filtro: %f segundos\n", cpu_time_used);
 
-    // Calcular suma de píxeles (parte paralelizable)
+    // Medir tiempo de cálculo de suma de píxeles
+    start = clock();
     int sumaPixeles = calcularSumaPixeles(imagenProcesada, width, height);
+    end = clock();
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Tiempo de cálculo de suma de píxeles: %f segundos\n", cpu_time_used);
 
     printf("Suma de píxeles: %d\n", sumaPixeles);
 
@@ -80,19 +97,37 @@ void guardarImagen(int *imagen, int width, int height) {
     fclose(archivo);
 }
 
-
+// Nueva función para aplicar el filtro con el operador de Sobel
 void aplicarFiltro(int *imagen, int *imagenProcesada, int width, int height) {
-    // Código que aplica un filtro a cada píxel (paralelizable)
-    for (int i = 0; i < width * height; i++) {
-        imagenProcesada[i] = imagen[i] / 2;  // Ejemplo de operación de filtro
+    int Gx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    int Gy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            int sumX = 0;
+            int sumY = 0;
+
+            // Aplicar máscaras de Sobel (Gx y Gy)
+            for (int ky = -1; ky <= 1; ky++) {
+                for (int kx = -1; kx <= 1; kx++) {
+                    sumX += imagen[(y + ky) * width + (x + kx)] * Gx[ky + 1][kx + 1];
+                    sumY += imagen[(y + ky) * width + (x + kx)] * Gy[ky + 1][kx + 1];
+                }
+            }
+
+            // Calcular magnitud del gradiente
+            int magnitude = abs(sumX) + abs(sumY);
+            imagenProcesada[y * width + x] = (magnitude > 255) ? 255 : magnitude; // Normalizar a 8 bits
+        }
     }
 }
 
+// Paralelizar la suma de píxeles
 int calcularSumaPixeles(int *imagen, int width, int height) {
     int suma = 0;
+
     for (int i = 0; i < width * height; i++) {
         suma += imagen[i];
     }
     return suma;
 }
-
