@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <omp.h>
 
 // Funciones placeholder para la carga y guardado de imágenes
 void cargarImagen(int *imagen, int width, int height);
 void guardarImagen(int *imagen, int width, int height);
 
-// Función para aplicar un filtro simple
+// Función para aplicar un filtro Sobel
 void aplicarFiltro(int *imagen, int *imagenProcesada, int width, int height);
 
 // Función para calcular la suma de los píxeles (como una estadística)
@@ -21,40 +21,39 @@ int main(int argc, char* argv[]) {
     int *imagenProcesada = (int *)malloc(width * height * sizeof(int));
 
     if (argc != 2) {
-        fprintf(stderr, "Dar un nombre de archivo de entrada");
+        fprintf(stderr, "Dar un nombre de archivo de entrada\n");
         exit(1);
     }
 
     filename = argv[1];
 
-    clock_t start, end;
-    double cpu_time_used;
+    double start, end;
 
-    // Medir tiempo de carga de imagen
-    start = clock();
+    // Medir tiempo de carga de imagen (no paralelizable)
+    start = omp_get_wtime();
     cargarImagen(imagen, width, height);
-    end = clock();
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Tiempo de carga de imagen: %f segundos\n", cpu_time_used);
+    end = omp_get_wtime();
+    printf("Tiempo de carga de imagen: %f segundos\n", end - start);
 
-    // Medir tiempo de aplicación del filtro
-    start = clock();
+    // Medir tiempo de aplicación del filtro (paralelizable)
+    start = omp_get_wtime();
     aplicarFiltro(imagen, imagenProcesada, width, height);
-    end = clock();
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Tiempo de aplicación del filtro: %f segundos\n", cpu_time_used);
+    end = omp_get_wtime();
+    printf("Tiempo de aplicación del filtro: %f segundos\n", end - start);
 
-    // Medir tiempo de cálculo de suma de píxeles
-    start = clock();
+    // Medir tiempo de cálculo de suma de píxeles (paralelizable)
+    start = omp_get_wtime();
     int sumaPixeles = calcularSumaPixeles(imagenProcesada, width, height);
-    end = clock();
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Tiempo de cálculo de suma de píxeles: %f segundos\n", cpu_time_used);
+    end = omp_get_wtime();
+    printf("Tiempo de cálculo de suma de píxeles: %f segundos\n", end - start);
 
     printf("Suma de píxeles: %d\n", sumaPixeles);
 
     // Guardar la imagen (no paralelizable)
+    start = omp_get_wtime();
     guardarImagen(imagenProcesada, width, height);
+    end = omp_get_wtime();
+    printf("Tiempo de guardado de imagen: %f segundos\n", end - start);
 
     free(imagen);
     free(imagenProcesada);
@@ -81,8 +80,8 @@ void cargarImagen(int *imagen, int width, int height) {
 void guardarImagen(int *imagen, int width, int height) {
     char *output_filename;
 
-    output_filename = (char*)malloc(sizeof(char)*(strlen(filename) + 4));
-    sprintf(output_filename,"%s.new",filename);
+    output_filename = (char*)malloc(sizeof(char) * (strlen(filename) + 4));
+    sprintf(output_filename, "%s.new", filename);
     FILE *archivo = fopen(output_filename, "wb");
     if (archivo == NULL) {
         perror("Error al abrir el archivo para guardar la imagen");
@@ -97,11 +96,12 @@ void guardarImagen(int *imagen, int width, int height) {
     fclose(archivo);
 }
 
-// Nueva función para aplicar el filtro con el operador de Sobel
+// Función para aplicar el filtro Sobel (paralelizable con OpenMP)
 void aplicarFiltro(int *imagen, int *imagenProcesada, int width, int height) {
     int Gx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     int Gy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
+    #pragma omp parallel for collapse(2)
     for (int y = 1; y < height - 1; y++) {
         for (int x = 1; x < width - 1; x++) {
             int sumX = 0;
@@ -122,12 +122,14 @@ void aplicarFiltro(int *imagen, int *imagenProcesada, int width, int height) {
     }
 }
 
-// Paralelizar la suma de píxeles
+// Función para calcular la suma de los píxeles (paralelizable con OpenMP)
 int calcularSumaPixeles(int *imagen, int width, int height) {
     int suma = 0;
 
+    #pragma omp parallel for reduction(+:suma)
     for (int i = 0; i < width * height; i++) {
         suma += imagen[i];
     }
     return suma;
 }
+
